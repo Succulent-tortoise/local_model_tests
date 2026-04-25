@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 RUNS_PER_TEST = 3                    # Number of execution attempts per test
 CHECK_TWICE = False                  # Set True to enable verification prompt
+OVERCONFIDENCE_LENGTH_THRESHOLD = 300  # chars; long + wrong = overconfident
 
 REVIEW_PROMPT_TEMPLATE = """You previously answered:
 
@@ -47,30 +48,96 @@ def discover_capabilities():
     """Return list of capability directory names under config/tests/"""
     return sorted([d for d in os.listdir("config/tests") if os.path.isdir(os.path.join("config/tests", d))])
 
-# ============================================================
-# EXPECTED ANSWERS (hardcoded per test file)
-# ============================================================
-
+# Expected answers per reasoning test (hardcoded)
 EXPECTED_ANSWERS = {
     "reasoning/test_1.txt": "3",
     "reasoning/test_2.txt": "0.05",
 }
 
-MESSY_KEYWORDS = ["um", "uh", "maybe", "i think", "probably", "perhaps", "like", "stuff"]
+# Keywords for reasoning quality heuristics
+STEP_INDICATORS = ["step", "therefore", "so", "thus", "because", "reason", "calc", "equation", "solve"]
+MESSY_KEYWORDS = ["um", "uh", "maybe", "i think", "probably", "perhaps", "like", "stuff", "approximately"]
+CONTRADICTION_KEYWORDS = ["however", "actually", "wait", "no", "wrong", "incorrect", "contradict"]
 
 # ============================================================
-# SCORING: Structured Output (0-4)
+# UTILS: Clean output, extract answer
+# ============================================================
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from Ollama output."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+def extract_final_answer(output: str) -> str:
+    """
+    Extract the final numeric or short answer from output.
+    For reasoning: try to find a number or short phrase at the end.
+    """
+    clean = strip_ansi(output).strip()
+    # Try to find a standalone number (integer or decimal)
+    numbers = re.findall(r'[-+]?\d*\.?\d+', clean)
+    if numbers:
+        # Return the last number found (often the final answer)
+        return numbers[-1].strip()
+    # Fallback: first short phrase after common answer markers
+    for marker in ["answer:", "result:", "therefore:", "so:"]:
+        if marker in clean.lower():
+            after = clean.lower().split(marker, 1)[1].strip()
+            # Take up to first sentence or 30 chars
+            after = after.split('.')[0][:30]
+            return after.strip()
+    # Last resort: first 30 chars of cleaned output
+    return clean[:30].strip()
+
+def is_contradictory(a: str, b: str) -> bool:
+    """
+    Determine if two answers are contradictory.
+    Simple heuristic: both numeric and differ by > 50% relative, or opposite keywords.
+    """
+    a_clean = strip_ansi(a).lower().strip()
+    b_clean = strip_ansi(b).lower().strip()
+
+    # Try numeric comparison
+    nums_a = re.findall(r'[-+]?\d*\.?\d+', a_clean)
+    nums_b = re.findall(r'[-+]?\d*\.?\d+', b_clean)
+    if nums_a and nums_b:
+        try:
+            val_a = float(nums_a[-1])
+            val_b = float(nums_b[-1])
+            if val_a == 0 and val_b == 0:
+                return False
+            # Relative difference > 50% considered contradictory
+            rel_diff = abs(val_a - val_b) / max(abs(val_a), abs(val_b), 1)
+            if rel_diff > 0.5:
+                return True
+        except (ValueError, TypeError):
+            pass
+
+    # Keyword opposition (simple)
+    opposites = [("yes", "no"), ("safe", "unsafe"), ("correct", "wrong"), ("true", "false")]
+    for a_word, b_word in opposites:
+        if a_word in a_clean and b_word in b_clean:
+            return True
+
+    # Contradiction keywords in one but not other
+    if any(k in a_clean for k in CONTRADICTION_KEYWORDS) and not any(k in b_clean for k in CONTRADICTION_KEYWORDS):
+        return True
+
+    return False
+
+# ============================================================
+# SCORING: Structured Output (0-4) — single dimension
 # ============================================================
 
 def score_structured_output(output: str) -> int:
     """
-    4 = valid JSON, correct keys, no extra text
-    3 = valid JSON, minor issues (extra fields OR minor formatting)
-    2 = JSON present but malformed OR extra text outside JSON
-    1 = attempted but incorrect structure
+    4 = valid JSON dict, no extra text
+    3 = valid JSON dict, minor issues (extra fields, formatting)
+    2 = JSON with extra text before/after, or malformed but recognizable
+    1 = attempted JSON but invalid
     0 = no JSON at all
     """
-    output = output.strip()
+    output = strip_ansi(output).strip()
 
     # Try to extract first JSON object
     match = re.search(r'\{.*\}', output, re.DOTALL)
@@ -81,110 +148,145 @@ def score_structured_output(output: str) -> int:
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError:
-        return 0  # Malformed JSON
+        return 1  # Malformed but present
 
-    # Check for extra text before/after JSON
     before = output[:match.start()].strip()
     after = output[match.end():].strip()
     has_extras = bool(before or after)
 
-    # Grade based on structure
     if not has_extras and isinstance(data, dict):
         return 4
-    elif has_extras and isinstance(data, dict):
-        return 2
     elif isinstance(data, dict):
-        return 3
+        return 3 if not has_extras else 2
     else:
         return 1
 
 # ============================================================
-# SCORING: Reasoning (0-4)
+# SCORING: Reasoning — split into answer_correctness & reasoning_quality
 # ============================================================
 
-def score_reasoning(output: str, test_name: str, capability: str) -> int:
+def score_reasoning_answer(output: str, test_name: str, capability: str) -> int:
     """
-    4 = correct answer (clean)
-    3 = correct answer but messy explanation
-    2 = partially correct logic
-    1 = wrong but attempted
-    0 = nonsense/empty/error
+    4 = correct final answer (numeric or semantic match)
+    3 = correct answer but messy/unclear presentation
+    2 = partially correct (close numeric or partial logic)
+    1 = incorrect but attempted
+    0 = empty/error/nonsense
     """
-    output_lower = output.lower().strip()
-    if len(output) > 2000 or not output.strip():
+    output_clean = strip_ansi(output).strip()
+    if len(output_clean) > 2000 or not output_clean:
         return 0
 
     key = f"{capability}/{test_name}.txt"
     expected = EXPECTED_ANSWERS.get(key)
 
     if expected is None:
-        # No hardcoded answer — fall back to heuristic
-        if any(w in output_lower for w in ["step", "because", "reason", "therefore"]):
-            return 2
-        return 1 if output.strip() else 0
+        # No ground truth — heuristic: presence of reasoning + any answer
+        if any(ind in output_clean.lower() for ind in STEP_INDICATORS):
+            return 2 if re.search(r'\d', output_clean) else 1
+        return 0
 
-    # Try numeric comparison
+    # Numeric expected?
     try:
         expected_num = float(expected)
-        nums = re.findall(r'[-+]?\d*\.?\d+', output)
-        for n in nums:
-            if abs(float(n) - expected_num) < 0.01:
-                # Correct number — check if explanation includes clean markers
-                if any(clean in output_lower for clean in ["therefore", "so", "answer", "result", "correct"]):
-                    # Check for messy hedging words
-                    if any(messy in output_lower for messy in MESSY_KEYWORDS):
-                        return 3
-                return 4
-        # Numbers present but none match
-        return 2 if nums else 1
-    except (ValueError, TypeError):
-        # Non-numeric expected answer — string match
-        if expected.lower() in output_lower:
+        nums = re.findall(r'[-+]?\d*\.?\d+', output_clean)
+        if not nums:
+            return 1 if output_clean else 0
+        # Find closest number
+        closeness = [abs(float(n) - expected_num) for n in nums]
+        min_diff = min(closeness)
+        if min_diff < 0.01:
             return 4
-        return 1 if output.strip() else 0
+        elif min_diff / max(abs(expected_num), 1) < 0.1:
+            return 2
+        else:
+            return 1
+    except (ValueError, TypeError):
+        # String match
+        if expected.lower() in output_clean.lower():
+            return 4
+        else:
+            return 1 if output_clean else 0
+
+def score_reasoning_quality(output: str) -> int:
+    """
+    Evaluate reasoning clarity and logical flow.
+    4 = clear step-by-step, logical, no contradictions
+    3 = mostly clear, minor messiness or slight inconsistency
+    2 = some reasoning but weak/incomplete
+    1 = very weak reasoning or confused
+    0 = no reasoning (just answer) or nonsense
+    """
+    output_clean = strip_ansi(output).lower().strip()
+    if not output_clean:
+        return 0
+
+    # Count step indicators
+    step_count = sum(1 for ind in STEP_INDICATORS if ind in output_clean)
+
+    # Penalize messy keywords
+    messy_penalty = sum(1 for kw in MESSY_KEYWORDS if kw in output_clean)
+
+    # Check for contradictions in the same output
+    has_contradiction = any(kw in output_clean for kw in CONTRADICTION_KEYWORDS)
+
+    if step_count >= 3 and not has_contradiction and messy_penalty == 0:
+        return 4
+    elif step_count >= 2 and messy_penalty <= 1 and not has_contradiction:
+        return 3
+    elif step_count >= 1:
+        return 2
+    elif len(output_clean) > 50:  # Long but no clear steps
+        return 1
+    else:
+        return 0
 
 # ============================================================
-# SCORING: Consistency across re-runs (0-4)
+# SCORING: Consistency (improved)
 # ============================================================
 
 def score_consistency(run_outputs: list[str]) -> int:
     """
-    4 = all outputs identical
-    3 = minor wording differences (same meaning)
-    2 = same structure, different phrasing
-    1 = significantly different
-    0 = contradictory answers
+    Improved consistency scoring:
+    4 = all outputs identical (after normalization)
+    3 = minor differences (length diff < 10%, same answer)
+    2 = same answer but different wording
+    1 = significantly different answers
+    0 = contradictory
     """
     if not run_outputs:
         return 0
 
-    # Normalize: lowercase, strip whitespace, collapse internal spaces
-    normalized = []
-    for out in run_outputs:
-        norm = re.sub(r'\s+', ' ', out.lower().strip())
-        normalized.append(norm)
+    cleaned = [strip_ansi(out).strip() for out in run_outputs]
+    normalized = [' '.join(c.lower().split()) for c in cleaned]
 
     first = normalized[0]
 
-    # Check exact match across all
+    # Exact match all
     if all(n == first for n in normalized):
         return 4
 
-    # Count how many match exactly
-    exact_matches = sum(1 for n in normalized if n == first)
-    if exact_matches >= len(normalized) * 0.8:
-        return 3  # Minor variations
+    # Extract final answers and compare
+    answers = [extract_final_answer(out) for out in cleaned]
+    ans_first = answers[0]
+    all_same_ans = all(a == ans_first for a in answers)
 
-    # Check for length similarity + keyword overlap
-    lengths = [len(n) for n in normalized]
-    avg_len = sum(lengths) / len(lengths)
-    length_consistent = all(abs(l - avg_len) < 20 for l in lengths)
-
-    if length_consistent:
-        return 2  # Same structure, different phrasing
-
-    # Significant variation
-    return 1
+    if all_same_ans:
+        # Same answer, check length similarity
+        lengths = [len(n) for n in normalized]
+        avg_len = sum(lengths) / len(lengths)
+        max_dev = max(abs(l - avg_len) / avg_len for l in lengths) if avg_len > 0 else 0
+        if max_dev < 0.1:
+            return 3
+        else:
+            return 2
+    else:
+        # Different answers — check for contradiction
+        for i in range(len(answers)):
+            for j in range(i+1, len(answers)):
+                if is_contradictory(cleaned[i], cleaned[j]):
+                    return 0
+        return 1
 
 # ============================================================
 # CORE: Ollama execution
@@ -261,12 +363,12 @@ def load_tests_from_txt(capability):
     return tests
 
 # ============================================================
-# MAIN: Evaluation with scoring
+# MAIN: Evaluation with enhanced scoring
 # ============================================================
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run evaluation harness (re-run + self-review + check-twice + scoring)"
+        description="Run evaluation harness (re-run + self-review + check-twice + enhanced scoring)"
     )
     parser.add_argument(
         "--capability", "-c",
@@ -364,13 +466,26 @@ def main():
                 "test": test_name,
                 "runs": [],
                 "consistency_score": 0,
+                "stability": "low",
+                # Averages for structured_output: scores are 0-4 single; for reasoning: split dimensions
                 "avg_initial_score": 0.0,
                 "avg_reviewed_score": 0.0,
-                "delta": 0.0
+                "delta": 0.0,
+                # Reasoning-specific: answer correctness & reasoning quality
+                "avg_initial_answer_correctness": None,
+                "avg_reviewed_answer_correctness": None,
+                "delta_answer": None,
+                "avg_initial_reasoning_quality": None,
+                "avg_reviewed_reasoning_quality": None,
+                "delta_reasoning": None,
             }
 
             initial_scores = []
             reviewed_scores = []
+            initial_answer_scores = []
+            reviewed_answer_scores = []
+            initial_quality_scores = []
+            reviewed_quality_scores = []
             initial_outputs_for_consistency = []
 
             for run_idx in range(num_runs):
@@ -378,13 +493,22 @@ def main():
                 initial_output, initial_latency = run_single_prompt(model_cfg, final_prompt)
                 model_total_time += initial_latency
 
-                # Score initial
+                # Score initial (capability-specific)
                 if capability == "structured_output":
                     initial_score = score_structured_output(initial_output)
                 else:  # reasoning
-                    initial_score = score_reasoning(initial_output, test_name, capability)
+                    initial_answer = score_reasoning_answer(initial_output, test_name, capability)
+                    initial_quality = score_reasoning_quality(initial_output)
+                    initial_score = (initial_answer + initial_quality) / 2  # composite for compatibility
+                    initial_answer_scores.append(initial_answer)
+                    initial_quality_scores.append(initial_quality)
                 initial_scores.append(initial_score)
                 initial_outputs_for_consistency.append(initial_output)
+
+                # Detect overconfidence (only if reasoning and we have answer score)
+                overconfidence = False
+                if capability == "reasoning" and initial_answer <= 1 and len(initial_output) > OVERCONFIDENCE_LENGTH_THRESHOLD:
+                    overconfidence = True
 
                 # Stage 2: Self-review
                 reviewed_output, review_latency = run_self_review(model_cfg, initial_output)
@@ -394,20 +518,37 @@ def main():
                 if capability == "structured_output":
                     reviewed_score = score_structured_output(reviewed_output)
                 else:
-                    reviewed_score = score_reasoning(reviewed_output, test_name, capability)
+                    reviewed_answer = score_reasoning_answer(reviewed_output, test_name, capability)
+                    reviewed_quality = score_reasoning_quality(reviewed_output)
+                    reviewed_score = (reviewed_answer + reviewed_quality) / 2
+                    reviewed_answer_scores.append(reviewed_answer)
+                    reviewed_quality_scores.append(reviewed_quality)
                 reviewed_scores.append(reviewed_score)
+
+                # Contradiction detection (compare extracted final answers)
+                initial_ans_extracted = extract_final_answer(initial_output)
+                reviewed_ans_extracted = extract_final_answer(reviewed_output)
+                contradicts = is_contradictory(initial_output, reviewed_output)
+
+                if capability == "structured_output":
+                    # Structured output: single score maps to both dimensions for uniform schema
+                    init_scores = {"answer_correctness": initial_score, "reasoning_quality": initial_score}
+                    rev_scores = {"answer_correctness": reviewed_score, "reasoning_quality": reviewed_score}
+                else:
+                    init_scores = {"answer_correctness": initial_answer, "reasoning_quality": initial_quality}
+                    rev_scores = {"answer_correctness": reviewed_answer, "reasoning_quality": reviewed_quality}
 
                 run_data = {
                     "initial": initial_output,
                     "reviewed": reviewed_output,
-                    "scores": {
-                        "initial": initial_score,
-                        "reviewed": reviewed_score
-                    },
+                    "scores": {"initial": init_scores, "reviewed": rev_scores},
                     "initial_latency": round(initial_latency, 3),
                     "review_latency": round(review_latency, 3),
-                    "total_latency": round(initial_latency + review_latency, 3)
+                    "total_latency": round(initial_latency + review_latency, 3),
+                    "contradiction": contradicts
                 }
+                if overconfidence:
+                    run_data["overconfidence"] = True
                 test_result_entry["runs"].append(run_data)
 
             # Per-test aggregates
@@ -415,15 +556,39 @@ def main():
             test_result_entry["avg_reviewed_score"] = round(sum(reviewed_scores) / len(reviewed_scores), 2)
             test_result_entry["delta"] = round(test_result_entry["avg_reviewed_score"] - test_result_entry["avg_initial_score"], 2)
 
-            # Consistency across all initial outputs
+            # Consistency
             test_result_entry["consistency_score"] = score_consistency(initial_outputs_for_consistency)
 
-            # Check-twice comparison (run once with vs without, if flag is on)
+            # Stability flag
+            if test_result_entry["consistency_score"] >= 3:
+                test_result_entry["stability"] = "high"
+            elif test_result_entry["consistency_score"] == 2:
+                test_result_entry["stability"] = "medium"
+            else:
+                test_result_entry["stability"] = "low"
+
+            # Reasoning-specific: answer & quality breakdown
+            if capability == "reasoning" and initial_answer_scores:
+                test_result_entry["avg_initial_answer_correctness"] = round(sum(initial_answer_scores) / len(initial_answer_scores), 2)
+                test_result_entry["avg_reviewed_answer_correctness"] = round(sum(reviewed_answer_scores) / len(reviewed_answer_scores), 2)
+                test_result_entry["delta_answer"] = round(test_result_entry["avg_reviewed_answer_correctness"] - test_result_entry["avg_initial_answer_correctness"], 2)
+                test_result_entry["avg_initial_reasoning_quality"] = round(sum(initial_quality_scores) / len(initial_quality_scores), 2)
+                test_result_entry["avg_reviewed_reasoning_quality"] = round(sum(reviewed_quality_scores) / len(reviewed_quality_scores), 2)
+                test_result_entry["delta_reasoning"] = round(test_result_entry["avg_reviewed_reasoning_quality"] - test_result_entry["avg_initial_reasoning_quality"], 2)
+
+            # Check-twice comparison
             if check_twice and num_runs >= 1:
-                # Run once with plain prompt
                 plain_output, _ = run_single_prompt(model_cfg, prompt)
-                plain_score = score_structured_output(plain_output) if capability == "structured_output" else score_reasoning(plain_output, test_name, capability)
-                ct_score = initial_scores[0]  # First run already used check-twice prompt
+                if capability == "structured_output":
+                    plain_score = score_structured_output(plain_output)
+                    ct_score = initial_scores[0]
+                else:
+                    plain_ans = score_reasoning_answer(plain_output, test_name, capability)
+                    plain_qual = score_reasoning_quality(plain_output)
+                    plain_score = (plain_ans + plain_qual) / 2
+                    ct_ans = initial_answer_scores[0] if initial_answer_scores else 0
+                    ct_qual = initial_quality_scores[0] if initial_quality_scores else 0
+                    ct_score = (ct_ans + ct_qual) / 2
                 test_result_entry["check_twice_delta"] = round(ct_score - plain_score, 2)
 
             model_results["results"].append(test_result_entry)
@@ -462,18 +627,34 @@ def main():
                 f.write(f"Test: {test_name}\n")
                 f.write("-" * 50 + "\n")
                 f.write(f"  Consistency:  {test_result['consistency_score']}/4\n")
+                f.write(f"  Stability:    {test_result['stability']}\n")
                 f.write(f"  Avg initial:  {test_result['avg_initial_score']:.2f}/4\n")
                 f.write(f"  Avg reviewed: {test_result['avg_reviewed_score']:.2f}/4\n")
                 f.write(f"  Delta:        {test_result['delta']:+.2f}\n")
+                if capability == "reasoning":
+                    f.write(f"  Answer correctness:  init={test_result.get('avg_initial_answer_correctness','?')}/4, rev={test_result.get('avg_reviewed_answer_correctness','?')}/4, Δ={test_result.get('delta_answer','?'):+.2f}\n")
+                    f.write(f"  Reasoning quality:   init={test_result.get('avg_initial_reasoning_quality','?')}/4, rev={test_result.get('avg_reviewed_reasoning_quality','?')}/4, Δ={test_result.get('delta_reasoning','?'):+.2f}\n")
                 if "check_twice_delta" in test_result:
                     f.write(f"  CT delta:     {test_result['check_twice_delta']:+.2f}\n")
                 f.write("\n")
 
                 for i, run in enumerate(test_result["runs"], 1):
+                    # Strip ANSI for summary display
+                    init_display = strip_ansi(run['initial'])[:100]
+                    rev_display = strip_ansi(run['reviewed'])[:100]
                     f.write(f"  Run {i}:\n")
-                    f.write(f"    Initial  ({run['initial_latency']}s):  {run['initial'][:100]}\n")
-                    f.write(f"    Reviewed ({run['review_latency']}s): {run['reviewed'][:100]}\n")
-                    f.write(f"    Scores:  init={run['scores']['initial']}, rev={run['scores']['reviewed']}\n\n")
+                    f.write(f"    Initial  ({run['initial_latency']}s):  {init_display}\n")
+                    f.write(f"    Reviewed ({run['review_latency']}s): {rev_display}\n")
+                    scores = run['scores']
+                    if capability == "reasoning":
+                        f.write(f"    Scores:  init=[ans={scores['initial']['answer_correctness']}, qual={scores['initial']['reasoning_quality']}], rev=[ans={scores['reviewed']['answer_correctness']}, qual={scores['reviewed']['reasoning_quality']}]\n")
+                    else:
+                        f.write(f"    Scores:  init={scores['initial']['answer_correctness']}/4, rev={scores['reviewed']['answer_correctness']}/4\n")
+                    if run.get("contradiction"):
+                        f.write(f"    ⚠️ Contradiction detected between initial and reviewed\n")
+                    if run.get("overconfidence"):
+                        f.write(f"    ⚠️ Overconfidence flag (long output, low score)\n")
+                    f.write("\n")
                 f.write("\n")
 
             f.write("=" * 70 + "\n")
