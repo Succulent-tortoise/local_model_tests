@@ -25,3 +25,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Source chat from chat gpt
+/home/matthew/projects/local_model_tests/docs/local_model_testing.md

@@ -1,0 +1,1 @@
+Return a JSON object representing a person with nested address: { "person": { "name": "Bob", "address": { "city": "Paris", "country": "France" } } }

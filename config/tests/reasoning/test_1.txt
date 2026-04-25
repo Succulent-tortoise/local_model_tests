@@ -1,0 +1,1 @@
+If 3 machines take 3 minutes to make 3 items, how long will 100 machines take to make 100 items? Return only the numeric answer (e.g., 5).
