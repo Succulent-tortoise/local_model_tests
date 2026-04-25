@@ -1,0 +1,8 @@
+{
+  "name": "state_tracking_2_changing_constraints",
+  "prompt": "Budget = $50\nBuy item = $20\n\nRemaining?\n\nNow buy another item = $40\n\nRemaining?",
+  "description": "Track budget state across transactions",
+  "type": "reasoning",
+  "expected_values": ["30", "-10"],
+  "category": "state_tracking"
+}

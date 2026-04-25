@@ -1,0 +1,8 @@
+{
+  "name": "self_correction_3_reflection",
+  "prompt": "Solve:\n5 * 6\n\nNow verify your answer.",
+  "description": "Reflection and verification step",
+  "type": "self_correction",
+  "expected_value": "30",
+  "category": "self_correction"
+}

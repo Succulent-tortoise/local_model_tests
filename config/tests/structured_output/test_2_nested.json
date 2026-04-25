@@ -1,0 +1,10 @@
+{
+  "name": "structured_output_2_nested",
+  "prompt": "Extract:\nName, job, and 2 skills\n\nReturn:\n{\n  \"person\": {\n    \"name\": string,\n    \"job\": string,\n    \"skills\": string[]\n  }\n}\n\nInput: Sarah, engineer, knows Python, Docker",
+  "description": "Nested JSON with array field",
+  "type": "structured_json",
+  "expected_keys": ["person"],
+  "extra_keys_allowed": false,
+  "nested_keys": ["person.name", "person.job", "person.skills"],
+  "category": "structured_output"
+}

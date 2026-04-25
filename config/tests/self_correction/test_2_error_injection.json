@@ -1,0 +1,8 @@
+{
+  "name": "self_correction_2_error_correction",
+  "prompt": "2 + 2 = 5\n\nCheck and correct this.",
+  "description": "Correct a deliberately wrong statement",
+  "type": "self_correction",
+  "expected_value": "4",
+  "category": "self_correction"
+}

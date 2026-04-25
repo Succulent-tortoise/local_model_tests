@@ -1,0 +1,8 @@
+{
+  "name": "creativity_2_style_constraint",
+  "prompt": "Describe a sunset in exactly 10 words.",
+  "description": "Precision word count with poetic description",
+  "type": "creativity",
+  "exact_word_count": 10,
+  "category": "creativity"
+}

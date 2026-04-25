@@ -1,0 +1,8 @@
+{
+  "name": "reasoning_2_word_problem",
+  "prompt": "A bat and ball cost $1.10 total.\nThe bat costs $1 more than the ball.\nHow much is the ball?",
+  "description": "Classic constraint word problem (ball = $0.05)",
+  "type": "reasoning",
+  "expected_value": "0.05",
+  "category": "reasoning"
+}

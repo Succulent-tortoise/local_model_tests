@@ -1,0 +1,10 @@
+{
+  "name": "structured_output_3_strict_enforcement",
+  "prompt": "Return ONLY valid JSON.\nNo explanation.\n\n{\n  \"result\": \"yes\" or \"no\"\n}\n\nQuestion: Is water wet?",
+  "description": "Strict format enforcement - no extra text",
+  "type": "structured_json",
+  "expected_keys": ["result"],
+  "extra_keys_allowed": false,
+  "must_be_only_output": true,
+  "category": "structured_output"
+}

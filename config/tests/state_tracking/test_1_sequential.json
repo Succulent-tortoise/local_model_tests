@@ -1,0 +1,8 @@
+{
+  "name": "state_tracking_1_sequential_updates",
+  "prompt": "Start with 100.\nSubtract 30.\nAdd 20.\n\nWhat's the result?",
+  "description": "Track sequential arithmetic state changes",
+  "type": "reasoning",
+  "expected_value": "90",
+  "category": "state_tracking"
+}

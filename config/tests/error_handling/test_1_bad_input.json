@@ -1,0 +1,8 @@
+{
+  "name": "error_handling_1_bad_input",
+  "prompt": "Parse this JSON:\n{invalid json here}",
+  "description": "Handle malformed input gracefully",
+  "type": "safety",
+  "expected_keywords": ["invalid", "error", "cannot parse", "malformed"],
+  "category": "error_handling"
+}

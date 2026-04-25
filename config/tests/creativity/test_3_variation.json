@@ -1,0 +1,8 @@
+{
+  "name": "creativity_3_variation",
+  "prompt": "Give 3 unique uses for a brick.",
+  "description": "Divergent thinking - distinct ideas",
+  "type": "creativity",
+  "expected_count": 3,
+  "category": "creativity"
+}

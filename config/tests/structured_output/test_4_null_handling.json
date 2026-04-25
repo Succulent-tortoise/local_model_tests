@@ -1,0 +1,9 @@
+{
+  "name": "structured_output_4_null_handling",
+  "prompt": "Extract a date from:\n\"no date is provided here\"\n\nReturn JSON:\n{\"date\": string or null}",
+  "description": "Handle missing data with null",
+  "type": "structured_json",
+  "expected_keys": ["date"],
+  "allow_null": true,
+  "category": "structured_output"
+}

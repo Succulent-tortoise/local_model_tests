@@ -1,0 +1,9 @@
+{
+  "name": "planning_1_basic_planning",
+  "prompt": "Break down how to clean a room into steps.",
+  "description": "Basic sequential planning without code",
+  "type": "planning",
+  "expected_steps_min": 5,
+  "code_presence": "none",
+  "category": "planning"
+}

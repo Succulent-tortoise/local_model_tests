@@ -1,0 +1,9 @@
+{
+  "name": "memory_1_simple_recall",
+  "prompt": "Remember: ZX-42-PL\n\nWhat is 5 + 5?\n\nNow: what was the code?",
+  "description": "Simple recall after arithmetic distraction",
+  "type": "memory_check",
+  "expected_code": "ZX-42-PL",
+  "arithmetic_answer": "10",
+  "category": "memory"
+}

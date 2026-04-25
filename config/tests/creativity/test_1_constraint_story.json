@@ -1,0 +1,9 @@
+{
+  "name": "creativity_1_constraint_story",
+  "prompt": "Write a 2-sentence story.\nSentence 2 must include a twist.",
+  "description": "Constrained creative writing with twist",
+  "type": "creativity",
+  "sentence_count": 2,
+  "twist_keywords": ["twist", "surprise", "but", "suddenly", "however", "unexpected"],
+  "category": "creativity"
+}

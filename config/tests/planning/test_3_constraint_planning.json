@@ -1,0 +1,9 @@
+{
+  "name": "planning_3_constraint_planning",
+  "prompt": "Plan a 30-minute workout.\nNo equipment.",
+  "description": "Planning under time and resource constraints",
+  "type": "planning",
+  "expected_steps_min": 4,
+  "code_presence": "none",
+  "category": "planning"
+}

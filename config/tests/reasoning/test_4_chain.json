@@ -1,0 +1,8 @@
+{
+  "name": "reasoning_4_chain_logic",
+  "prompt": "If all bloops are razzies and all razzies are lazzies,\nare all bloops definitely lazzies? Explain.",
+  "description": "Syllogistic chain reasoning: A→B, B→C, therefore A→C (yes)",
+  "type": "reasoning",
+  "expected_semantic": "yes",
+  "category": "reasoning"
+}

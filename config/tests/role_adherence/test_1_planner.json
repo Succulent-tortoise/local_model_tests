@@ -1,0 +1,8 @@
+{
+  "name": "role_1_planner_only",
+  "prompt": "You are a planner.\nYou are NOT an executor.\nDo NOT execute.\n\nTask: Build a website from scratch.\n\nProvide plan only.",
+  "description": "Adhere to planner role - no execution",
+  "type": "planning",
+  "expected_no_code": true,
+  "category": "role_adherence"
+}

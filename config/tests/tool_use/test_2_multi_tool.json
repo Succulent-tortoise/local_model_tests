@@ -1,0 +1,8 @@
+{
+  "name": "tool_use_2_multi_tool_planning",
+  "prompt": "Task: Calculate total cost of 3 items priced online.\n\nWhich steps require tools?\nList steps only.",
+  "description": "Identify steps requiring external tools",
+  "type": "planning",
+  "expected_steps_min": 3,
+  "category": "tool_use"
+}

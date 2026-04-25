@@ -1,0 +1,8 @@
+{
+  "name": "self_correction_1_review_improve",
+  "prompt": "Answer:\nWhy is the sky blue?\n\nNow review and improve your answer.",
+  "description": "Self-review and improvement in single turn",
+  "type": "self_correction",
+  "expected_improvement": true,
+  "category": "self_correction"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "role_2_executor_only",
+  "prompt": "You are an executor.\nYou are NOT a planner.\nDo NOT explain.\n\nOutput JSON only:\n{\"result\": \"done\"}",
+  "description": "Adhere to executor role - no explanation",
+  "type": "structured_json",
+  "expected_keys": ["result"],
+  "must_be_only_output": true,
+  "category": "role_adherence"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "structured_output_1_basic_json",
+  "prompt": "Extract name and age from:\n\"John is 32 years old\"\n\nReturn JSON only:\n{\"name\": string, \"age\": number}",
+  "description": "Basic JSON extraction with simple types",
+  "type": "structured_json",
+  "expected_keys": ["name", "age"],
+  "extra_keys_allowed": false,
+  "category": "structured_output"
+}

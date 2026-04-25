@@ -1,0 +1,8 @@
+{
+  "name": "memory_2_delayed_recall",
+  "prompt": "Remember: green apple\n\n[unrelated question here]\n\nWhat was the phrase you were asked to remember?",
+  "description": "Recall after intervening content",
+  "type": "memory_check",
+  "expected_code": "green apple",
+  "category": "memory"
+}

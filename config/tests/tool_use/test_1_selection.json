@@ -1,0 +1,8 @@
+{
+  "name": "tool_use_1_tool_selection",
+  "prompt": "Available tools:\n- calculator\n- web_search\n\nTask: Find the population of Japan.\n\nWhich tool do you use and why?\nDo not answer the question.",
+  "description": "Select correct tool (web_search) without answering",
+  "type": "tool_selection",
+  "expected_tool": "search",
+  "category": "tool_use"
+}

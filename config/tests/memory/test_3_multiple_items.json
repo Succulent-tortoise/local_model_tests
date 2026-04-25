@@ -1,0 +1,8 @@
+{
+  "name": "memory_3_multiple_items",
+  "prompt": "Remember:\nA = 5\nB = 10\n\nWhat is A + B?\n\nWhat was B's value?",
+  "description": "Recall multiple memorized values",
+  "type": "memory_check",
+  "expected_code": "10",
+  "category": "memory"
+}

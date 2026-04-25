@@ -1,0 +1,8 @@
+{
+  "name": "reasoning_3_multi_step_word",
+  "prompt": "You buy 3 items at $10 each.\nYou get a 20% discount, then add 10% tax.\nFinal cost?",
+  "description": "Percentage discount + tax calculation ($26.40)",
+  "type": "reasoning",
+  "expected_value": "26.40",
+  "category": "reasoning"
+}

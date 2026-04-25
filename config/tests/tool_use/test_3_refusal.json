@@ -1,0 +1,8 @@
+{
+  "name": "tool_use_3_tool_refusal",
+  "prompt": "You have a calculator tool.\n\nTask: Write a poem.\n\nShould you use the tool? Why?",
+  "description": "Recognize when tool is not appropriate",
+  "type": "tool_selection",
+  "expected_semantic": "no",
+  "category": "tool_use"
+}
