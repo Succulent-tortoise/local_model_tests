@@ -3,6 +3,6 @@
   "prompt": "If 3 machines take 3 minutes to make 3 items,\nhow long for 100 machines to make 100 items?",
   "description": "Rate-based arithmetic reasoning",
   "type": "reasoning",
-  "expected_value": "3 minutes",
+  "expected_value": 3,
   "category": "reasoning"
 }
