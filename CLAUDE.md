@@ -31,43 +31,68 @@ cat results/results.json | python -m json.tool
 
 ## Project Overview
 
-A Python-based evaluation harness for testing local LLM models via Ollama. The project defines a suite of tests (reasoning, JSON extraction, instruction following, safety) and runs them against multiple local models to compare performance, accuracy, and latency.
+A Python-based evaluation harness for testing local LLM models via Ollama. Tests are organized into **12 capability buckets** (39 tests total) with 0–4 scoring per test.
 
-**Current models** (in `config/config.json`): 21 models spanning 5 categories:
-- **Reasoning/agent**: openhermes:7b, phi3:3.8b-mini, mixtral:8x7b, llama3.1
-- **Code**: deepseek-coder:6.7b-instruct, starcoder2:7b, codellama:7b-instruct, qwen2.5-coder series
-- **Instruct**: llama3.1:8b-instruct, qwen2.5:7b-instruct, mistral-nemo:12b, phi3:3.8b-mini
-- **General**: gemma2:2b, llama3.2:latest, yi:6b-chat, mistral:latest
-- **Embedding**: nomic-embed-text:latest (marked `skip: true`)
+Models configured in `config/config.json`; results written to `results/results.json`. Supports per-capability runs, per-model filtering, and configurable cooldown/thermal management.
 
-See `config/config.json` for the full registry with temperatures, sizes, and notes.
+**Quick CLI:**
+```bash
+python src/eval.py --list                    # Show all capabilities
+python src/eval.py --capability reasoning    # Run one capability only
+python src/eval.py --model gemma2            # Run one model only
+```
 
 ## Directory Structure
 
 ```
 local_model_tests/
 ├── config/
-│   ├── config.json       # Model registry + global settings (cooldown, retries)
-│   └── tests.json        # 13 test definitions with prompts and scoring criteria
+│   ├── config.json           # Model registry + global settings (cooldown, retries)
+│   ├── config.example.json   # Starter template for new users
+│   └── tests/                # 12 capability directories, each with 3–5 JSON test files
+│       ├── structured_output/
+│       │   ├── test_1_basic.json
+│       │   ├── test_2_nested.json
+│       │   ├── test_3_strict.json
+│       │   └── test_4_null_handling.json
+│       ├── reasoning/
+│       │   ├── test_1_arithmetic.json
+│       │   ├── test_2_word_problem.json
+│       │   ├── test_3_multi_step.json
+│       │   └── test_4_chain.json
+│       ├── tool_use/
+│       ├── memory/
+│       ├── state_tracking/
+│       ├── refusal_safety/
+│       ├── creativity/
+│       ├── planning/
+│       ├── self_correction/
+│       ├── role_adherence/
+│       ├── consistency/
+│       └── error_handling/
 ├── src/
-│   └── eval.py           # Main harness — config loading, Ollama subprocesses, scoring, reporting
+│   └── eval.py               # Main harness — config loading, Ollama subprocesses, scoring, reporting
 ├── results/
-│   └── results.json      # Generated at runtime — full outputs, scores, latencies
-└── docs/
-    └── local_model_testing.md  # Original design doc with test ideas
+│   └── results.json          # Generated at runtime — full outputs, scores, latencies
+├── docs/
+│   └── local_model_testing.md  # Original design doc with test ideas
+├── .gitignore                 # Ignores results/ and local config/config.json
+├── README.md                  # User-facing documentation
+└── CLAUDE.md                  # This file — for Claude Code guidance
 ```
 
 ## Architecture
 
 ### Core Flow (`eval.py`)
 
-1. **Load configuration** — `config/config.json` (models + settings) and `config/tests.json` (test suite)
-2. **Iterate models × tests** — For each model:
-   - Filter tests by `category` (only run if `test.category == model.type` or no category)
+1. **Load configuration** — `config/config.json` (models + settings)
+2. **Discover capabilities** — Scans `config/tests/<capability>/` for JSON test files
+3. **Select tests** — By `--capability` flag (default: all). Each JSON file defines a test with `type`, `prompt`, and expected criteria.
+4. **Iterate models × tests** — For each model:
    - Format prompt via `format_prompt()` with model-specific prefix
    - Execute `ollama run <model>` as subprocess (capture stdout/stderr)
    - Apply retry logic (default 2 attempts, keeps best score)
-3. **Scoring** — `score_test()` uses a **0–4 rubric**:
+5. **Scoring** — `score_test()` uses a **0–4 rubric** based on test `type`:
 
 | Score | Meaning                 |
 |-------|-------------------------|
@@ -77,24 +102,47 @@ local_model_tests/
 | 3     | correct but messy       |
 | 4     | clean + reliable        |
 
-4. **Post-processing** — Compute `consistency_pair_bonus` for paired `consistency_a`/`consistency_b` tests
-5. **Output** — Write `results/results.json`, print per-model summary (points, percentage, average)
+6. **Post-processing** — Compute `consistency_pair_bonus` for paired `consistency_a`/`consistency_b` tests
+7. **Output** — Write `results/results.json`, print per-model summary (points, percentage, average)
 
-### Scoring Types
+---
 
-The harness supports 13 test types with specialized scoring logic:
+### Capability Discovery & CLI
 
-- **`structured_json` / `simple_json`** — JSON extraction with key validation, optional strict schema
-- **`reasoning` / `multi_step_reasoning`** — Regex pattern matching for numeric answers, reasoning keywords
-- **`self_correction** — Detects two-phase structure (initial answer + review/correction)
-- **`tool_selection`** — Checks for expected tool name + justification language
-- **`precision_instruction`** — Bullet count, word count, punctuation rules
-- **`memory_check`** — Dual verification: code recall + arithmetic answer
-- **`safety`** — Keyword matching for appropriate refusal/hallucination avoidance
-- **`planning`** — Step count validation, code absence check
-- **`creativity`** — Sentence count + twist keyword detection
-- **`consistency_a` / `consistency_b`** — Safety-consistency pairing (sensitive/unsafe topics)
-- **`bullet_count`** — Exact bullet count with optional extra line tolerance
+Discovery: `eval.py` scans `config/tests/` for subdirectories; each becomes a capability.
+
+CLI flags:
+- `--list` or `-l` — list all capabilities with test counts
+- `--capability <name>` or `-c <name>` — run only that capability (e.g., `structured_output`, `reasoning`)
+- `--model <substring>` or `-m <substring>` — run only matching model(s)
+- `--help` — full usage
+
+Examples:
+```bash
+python src/eval.py --list                     # Show capabilities
+python src/eval.py --capability reasoning     # Test reasoning only
+python src/eval.py --model llama             # Test models matching "llama"
+python src/eval.py --capability structured_output --model gemma2
+```
+
+---
+
+### Test Type Implementations
+
+The `score_test()` function handles these types:
+
+- **`structured_json` / `simple_json`** — Valid JSON with required keys; optional nested key checks; extra key penalization.
+- **`multi_step_reasoning`** — Specific numeric checks (e.g., chickens=18, cows=12) + equation presence.
+- **`reasoning`** — General numeric/semantic expected value detection; reasoning keywords.
+- **`self_correction** — Two-phase detection (`step 1` / `step 2`, or `initial` / `review`).
+- **`tool_selection`** — Expected tool presence + justification language.
+- **`planning`** — Step count, code absence, numbered/bulleted patterns.
+- **`memory_check`** — Dual recall: memorized code + arithmetic value.
+- **`safety`** — Refusal/hallucination keywords (includes `not applicable`, `don't know`).
+- **`creativity`** — Sentence count, twist keyword, exact word count, or unique items.
+- **`precision_instruction`** — Bullet count, words per bullet, punctuation check.
+- **`consistency_a` / `consistency_b`** — Safety-consistency (used as pair for bonus).
+- **`bullet_count`** — Classic markdown bullet counting.
 
 ### Prompt Formatting (`format_prompt`)
 
@@ -143,23 +191,32 @@ Model-type modifiers are appended:
 }
 ```
 
-**`config/tests.json`:**
-Each test has:
+**`config/tests/<capability>/*.json`:**  
+Test files are organized by capability directory (`config/tests/structured_output/`, `config/tests/reasoning/`, etc.). Each JSON file defines one test:
+
 ```json
 {
-  "name": "test_identifier",
-  "prompt": "exact prompt text",
-  "type": "reasoning|json|bullet_count|safety|...",
-  "category": "reasoning|code|json|instruction|memory|general", // optional, filters by model.type
-  // Type-specific fields:
-  "expected": "exact match",
-  "expected_keys": ["key1", "key2"],
-  "expected_count": 5,
-  "expected_pairs": [{"chickens": 18, "cows": 12}],
+  "name": "test_identifier_including_capability_prefix",
+  "prompt": "exact prompt text sent to model",
+  "type": "reasoning|structured_json|tool_selection|planning|...",
+  "description": "human-readable purpose",
+  // Type-specific expected criteria:
+  "expected_keys": ["name", "age"],
+  "expected_value": "42",
+  "expected_semantic": "yes",
   "expected_tool": "calculator",
-  // ...plus other type-specific criteria
+  "expected_steps_min": 5,
+  "expected_code": "ABC-123",
+  "exact_word_count": 10,
+  "twist_keywords": ["twist", "surprise", "but"],
+  "sentence_count": 2,
+  "expected_bullets": 5,
+  "words_per_bullet": 5,
+  "category": "optional_filter_by_model_type"
 }
 ```
+
+Run `python src/eval.py --list` to see all 12 capabilities and test counts.
 
 ### GPU Cooldown System
 
