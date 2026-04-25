@@ -2,7 +2,7 @@
 
 A Python-based evaluation harness for systematically testing local LLM models (via Ollama) across a diverse test suite. Score models on a 0–4 scale across reasoning, code, instruction following, safety, and more.
 
-**Current test suite**: 13 tests | **Supported models**: 20+ (any Ollama model)
+**Current test suite**: 39 tests across 12 capabilities | **Supported models**: 20+ (any Ollama model)
 
 ## Quick Start
 
@@ -20,8 +20,25 @@ A Python-based evaluation harness for systematically testing local LLM models (v
    Edit `config/config.json` to list the models you have installed, with appropriate `type` and `temperature`.
 
 3. **Run the harness**:
+
+   All capabilities on all models:
    ```bash
    python src/eval.py
+   ```
+
+   Single capability only:
+   ```bash
+   python src/eval.py --capability structured_output
+   ```
+
+   Single model only:
+   ```bash
+   python src/eval.py --model gemma2
+   ```
+
+   List all capabilities:
+   ```bash
+   python src/eval.py --list
    ```
 
 4. **Find results** in `results/results.json` with scores, outputs, and latencies.
@@ -69,7 +86,7 @@ A Python-based evaluation harness for systematically testing local LLM models (v
 - `type`: Used for prompt prefixing (reasoning/code/instruct/general) and optional test category filtering
 - `cooldown.gpu_temp_monitoring`: If `true`, uses `nvidia-smi` to wait for GPU to cool down (NVIDIA only)
 
-## Test Types (0–4 Scale)
+## Capabilities & Test Types (0–4 Scale)
 
 | Score | Meaning                 |
 |-------|-------------------------|
@@ -79,24 +96,70 @@ A Python-based evaluation harness for systematically testing local LLM models (v
 | 3     | correct but messy       |
 | 4     | clean + reliable        |
 
-### Test Descriptions
+Tests are organized into **12 capability directories**, each with 3–5 tests of increasing difficulty:
 
-- `structured_output_nested` — strict JSON schema with array field
-- `multi_step_reasoning` — word problem (chickens/cows), expects equations and correct answer (18 chickens, 12 cows)
-- `self_correction` — two-step "write then review" in one prompt
-- `tool_use_simulation` — selects correct tool (calculator) without answering directly
-- `instruction_edge_case` — 3 bullets, 5 words each, no punctuation
-- `context_retention` — remembers code `8472XQ` after arithmetic distraction
-- `hallucination_trap_strong` — Nobel Prize 2025; expects "not applicable"
-- `planning_decomposition` — web scraper planning steps, no code
-- `controlled_creativity` — 2-sentence story with a twist
-- `consistency_test_a/b` — same safety question in two wordings (paired consistency bonus)
-- `instruction_following_bullets` — exactly 5 markdown bullets
-- `json_extraction_simple` — JSON with expected keys
+### Structured Output (4 tests)
+- `test_1_basic`: Simple JSON name/age extraction
+- `test_2_nested`: Nested object with array skills
+- `test_3_strict`: Strict format enforcement, no extra text
+- `test_4_null_handling`: Proper null for missing data
+
+### Reasoning (4 tests)
+- `test_1_arithmetic`: Rate-based logic (3 machines → 3 min for 3 items → 100 machines)
+- `test_2_word_problem`: Classic bat/ball ($1.10, bat $1 more → ball $0.05)
+- `test_3_multi_step`: Percentage discount + tax ($30 items, 20% off, 10% tax → $26.40)
+- `test_4_chain`: Syllogistic chain (all A→B, all B→C → all A→C)
+
+### Tool Use (3 tests)
+- `test_1_selection`: Choose `web_search` for population question
+- `test_2_multi_tool`: Plan steps requiring tools for cost calculation
+- `test_3_refusal`: Recognize calculator is wrong tool for poem writing
+
+### Memory (3 tests)
+- `test_1_simple_recall`: Remember code after arithmetic (5 + 5)
+- `test_2_delayed_recall`: Recall after intervening question
+- `test_3_multiple_items`: Recall two memorized variables
+
+### State Tracking (2 tests)
+- `test_1_sequential`: 100 - 30 + 20
+- `test_2_changing_constraints`: Budget tracking across two purchases
+
+### Refusal / Safety (3 tests)
+- `test_1_unknown`: Nobel Prize 2025 (should refuse)
+- `test_2_explicit_uncertainty`: Follow "I don't know" instruction for Atlantis capital
+- `test_3_override`: Should still answer "4" even if told "always answer even if incorrect"
+
+### Creativity (3 tests)
+- `test_1_constraint_story`: 2-sentence story with twist
+- `test_2_style_length`: Sunset description in exactly 10 words
+- `test_3_variation`: 3 unique uses for a brick
+
+### Planning (3 tests)
+- `test_1_basic_planning`: Break down room cleaning into steps
+- `test_2_technical_planning`: Web scraper plan (no code)
+- `test_3_constraint_planning`: 30-minute workout with no equipment
+
+### Self-Correction (3 tests)
+- `test_1_review`: "Why is sky blue?" followed by review & improvement
+- `test_2_error_injection`: Correct "2 + 2 = 5"
+- `test_3_reflection`: Verify "5 * 6"
+
+### Role Adherence (2 tests)
+- `test_1_planner`: Planner role only (no execution) for website build
+- `test_2_executor`: Executor role (no explanation), output JSON only
+
+### Consistency (1 test, run multiple times)
+- `test_stability`: Same safety question repeated to measure drift
+
+### Error Handling (2 tests)
+- `test_1_bad_input`: Malformed JSON parsing
+- `test_2_empty_input`: Empty/blank input summarization
+
+Results are aggregated per capability when running all tests, or isolated per capability when using `--capability`.
 
 ## Adding New Tests
 
-Edit `config/tests.json`. Each test needs:
+Tests are organized by capability under `config/tests/<capability>/`. Each test is a JSON file:
 
 ```json
 {
@@ -107,7 +170,12 @@ Edit `config/tests.json`. Each test needs:
 }
 ```
 
-Then implement a scoring branch in `src/eval.py` in the `score_test()` function for your `type`.
+To create a new test:
+1. Choose or create a capability directory under `config/tests/`
+2. Add a JSON file (e.g., `test_5_hard.json`) with your test definition
+3. Implement a scoring branch in `src/eval.py`'s `score_test()` function for your `type` (or reuse an existing type)
+
+Run `python src/eval.py --list` to see all capabilities.
 
 ## Notes
 
@@ -121,16 +189,28 @@ Then implement a scoring branch in `src/eval.py` in the `score_test()` function 
 ```
 local_model_tests/
 ├── config/
-│   ├── config.json          # Your model list (local, not committed)
-│   ├── config.example.json  # Template for new users
-│   └── tests.json           # Test definitions
+│   ├── config.json           # Your model list (local, gitignored)
+│   ├── config.example.json   # Template for new users
+│   └── tests/                # 12 capability directories with JSON test files
+│       ├── structured_output/
+│       ├── reasoning/
+│       ├── tool_use/
+│       ├── memory/
+│       ├── state_tracking/
+│       ├── refusal_safety/
+│       ├── creativity/
+│       ├── planning/
+│       ├── self_correction/
+│       ├── role_adherence/
+│       ├── consistency/
+│       └── error_handling/
 ├── src/
-│   └── eval.py              # Harness
-├── results/                 # Created at runtime
+│   └── eval.py               # Harness with CLI args (--capability, --model, --list)
+├── results/                  # Created at runtime (gitignored)
 ├── docs/
-│   └── local_model_testing.md  # Design history
-├── CLAUDE.md                # For Claude Code guidance
-└── README.md                # This file
+│   └── local_model_testing.md  # Historical design notes
+├── CLAUDE.md                 # For Claude Code guidance
+└── README.md                 # This file
 ```
 
 ## Requirements
