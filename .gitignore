@@ -1,0 +1,27 @@
+# Results
+results/
+!results/.gitkeep
+
+# Local config (contains your model list, temperatures, etc.)
+config/config.json
+
+# Python cache
+src/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

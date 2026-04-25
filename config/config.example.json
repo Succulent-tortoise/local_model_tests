@@ -1,0 +1,40 @@
+{
+  "models": [
+    {
+      "name": "gemma2:2b",
+      "type": "general",
+      "temperature": 0.3,
+      "notes": "Ultra-fast baseline"
+    },
+    {
+      "name": "phi3:3.8b-mini-128k-instruct-q4_K_M",
+      "type": "instruct",
+      "temperature": 0.2,
+      "notes": "Fast small agent worker"
+    },
+    {
+      "name": "llama3.1:8b-instruct-q4_K_M",
+      "type": "instruct",
+      "temperature": 0.2,
+      "notes": "Good general assistant"
+    },
+    {
+      "name": "qwen2.5-coder:3b",
+      "type": "code",
+      "temperature": 0.1,
+      "notes": "Mid-range code model"
+    }
+  ],
+  "settings": {
+    "default_temperature": 0.2,
+    "retry_attempts": 2,
+    "max_output_length": 2000,
+    "results_dir": "results",
+    "cooldown": {
+      "enabled": true,
+      "seconds_between_tests": 0.5,
+      "seconds_between_models": 1,
+      "gpu_temp_monitoring": false
+    }
+  }
+}
