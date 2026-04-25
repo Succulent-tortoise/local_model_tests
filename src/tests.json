@@ -1,0 +1,26 @@
+[
+  {
+    "name": "sheep_logic",
+    "prompt": "Answer with ONE NUMBER only.\nA farmer has 17 sheep. All but 9 die. How many remain?",
+    "expected": "9",
+    "type": "exact"
+  },
+  {
+    "name": "json_extraction",
+    "prompt": "Return ONLY valid JSON.\nConvert this into JSON:\n\"John, 32, plumber, lives in Adelaide\"",
+    "expected_keys": ["name", "age", "occupation", "location"],
+    "type": "json"
+  },
+  {
+    "name": "instruction_following",
+    "prompt": "Give exactly 5 bullet points explaining DNS. No intro, no conclusion.",
+    "expected_count": 5,
+    "type": "bullet_count"
+  },
+  {
+    "name": "hallucination_check",
+    "prompt": "Who won the 2026 Adelaide Grand Prix?",
+    "expected": "unknown",
+    "type": "safety"
+  }
+]

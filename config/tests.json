@@ -1,0 +1,128 @@
+[
+  {
+    "name": "structured_output_nested",
+    "prompt": "Extract: Name, occupation, and a list of 3 skills.\n\nReturn STRICT JSON:\n{\n  \"name\": string,\n  \"occupation\": string,\n  \"skills\": string[]\n}\n\nInput: Sarah, engineer, knows Python, Docker, Kubernetes",
+    "description": "Nested JSON with strict schema validation",
+    "type": "structured_json",
+    "expected_keys": [
+      "name",
+      "occupation",
+      "skills"
+    ],
+    "extra_keys_allowed": false
+  },
+  {
+    "name": "multi_step_reasoning",
+    "prompt": "A farmer has chickens and cows. There are 30 heads and 84 legs. How many of each? Explain your reasoning step-by-step, showing the equations.",
+    "description": "System of equations with visible reasoning",
+    "type": "reasoning",
+    "expected_pairs": [
+      {
+        "chickens": 18,
+        "cows": 12
+      }
+    ],
+    "check_method": "equation_solve"
+  },
+  {
+    "name": "self_correction",
+    "prompt": "Step 1:\nWrite a short answer explaining why the sky is blue.\n\nStep 2:\nReview your previous answer. Identify any inaccuracies and correct them.",
+    "description": "Two-turn self-correction in single prompt",
+    "type": "self_correction",
+    "expected_improvement": true
+  },
+  {
+    "name": "tool_use_simulation",
+    "prompt": "You have access to:\n- calculator(a, b)\n- search(query)\n\nExplain which tool you would use and why for this task: \"What is 15% of 240?\". Do NOT answer directly. Only select the tool.",
+    "description": "Correct tool selection without direct computation",
+    "type": "tool_selection",
+    "expected_tool": "calculator"
+  },
+  {
+    "name": "instruction_edge_case",
+    "prompt": "Write exactly 3 bullet points.\nEach must contain exactly 5 words.\nDo not include any punctuation.",
+    "description": "Precision constraints on format and length",
+    "type": "precision_instruction",
+    "expected_bullets": 3,
+    "words_per_bullet": 5,
+    "allow_punctuation": false
+  },
+  {
+    "name": "context_retention",
+    "prompt": "Remember this code: 8472XQ\n\nNow answer:\nWhat is 12 * 8?\n\nNow: what was the code?",
+    "description": "Short-term memory after arithmetic distraction",
+    "type": "memory_check",
+    "expected_code": "8472XQ",
+    "arithmetic_answer": "96"
+  },
+  {
+    "name": "hallucination_trap_strong",
+    "prompt": "Who won the 2025 Nobel Prize in Mathematics? If it doesn't exist, say \"not applicable\".",
+    "description": "Clear correct refusal expected",
+    "type": "safety",
+    "expected": "not applicable",
+    "keywords": [
+      "not applicable",
+      "does not exist",
+      "no prize",
+      "not aware"
+    ]
+  },
+  {
+    "name": "planning_decomposition",
+    "prompt": "Break down how you would build a web scraper into steps. Do NOT write code. Only list the planning steps.",
+    "description": "Planning without jumping to implementation",
+    "type": "planning",
+    "expected_steps_min": 5,
+    "code_presence": "none"
+  },
+  {
+    "name": "controlled_creativity",
+    "prompt": "Write a 2-sentence story.\nSentence 1: normal\nSentence 2: must include a twist",
+    "description": "Constrained creative writing",
+    "type": "creativity",
+    "sentence_count": 2,
+    "twist_keywords": [
+      "twist",
+      "surprise",
+      "but",
+      "suddenly",
+      "however",
+      "unexpected"
+    ]
+  },
+  {
+    "name": "consistency_test_a",
+    "prompt": "Is it safe to store passwords in plain text?",
+    "description": "First of two consistency questions",
+    "type": "consistency_a",
+    "expected_unsafe": true
+  },
+  {
+    "name": "consistency_test_b",
+    "prompt": "Should passwords ever be stored without encryption?",
+    "description": "Second of two consistency questions (paired with consistency_a)",
+    "type": "consistency_b",
+    "expected_unsafe": true
+  },
+  {
+    "name": "instruction_following_bullets",
+    "prompt": "Give exactly 5 bullet points explaining how DNS works. No intro, no conclusion.",
+    "description": "Classic: exact count and no extra content",
+    "type": "bullet_count",
+    "expected_count": 5,
+    "max_extra_lines": 2
+  },
+  {
+    "name": "json_extraction_simple",
+    "prompt": "Return ONLY valid JSON.\nConvert this into JSON:\n\"John, 32, plumber, lives in Adelaide\"",
+    "description": "Simple JSON extraction with expected keys",
+    "type": "simple_json",
+    "expected_keys": [
+      "name",
+      "age",
+      "occupation",
+      "location"
+    ]
+  }
+]
